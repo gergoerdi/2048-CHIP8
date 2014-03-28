@@ -5,9 +5,11 @@
 ;;; 1..10 is a tile with values 2..1024
 ;;; 11 is the target tile: as soon as we get an 11 tile, the user has won
 ;;;
-;;;
 START:
+        call NEWGAME
         call DRAW_GRID
+        call PLACE_RANDOM_TILE
+        call PLACE_RANDOM_TILE
 
         ;; call SLIDE_UP
         ;; call BLIT
@@ -18,6 +20,7 @@ LOOP:
         load va, key
         call DRAW
 
+        load vd, 0
         skip.ne va, 6
         call SLIDE_RIGHT
         skip.ne va, 4
@@ -26,6 +29,10 @@ LOOP:
         call SLIDE_DOWN
         skip.ne va, 2
         call SLIDE_UP
+
+        skip.eq vd, 0
+        call PLACE_RANDOM_TILE
+
         jump LOOP
 
 DRAW_GRID:
@@ -125,14 +132,13 @@ ROTATE_LOOP:
         jump ROTATE_LOOP
 
 ;;; SLIDE_LEFT
-;;; Out: VF: WIN
-;;; Use: V0: TMP
-;;;      V1: K
-;;;      V2: K'
-;;;      V3: LAST
-;;;      V4: END_ROW
-;;;      V5: ROW
-;;;      V6: MATCH
+;;; Vars: V0: TMP
+;;;       V1: K
+;;;       V2: K'
+;;;       V3: LAST
+;;;       V4: END_ROW
+;;;       V5: ROW
+;;;       V6: MATCH
 SLIDE_LEFT:
         call SLIDE_LEFT_INT
         call BLIT
@@ -160,7 +166,7 @@ SLIDE_LEFT_ROW:
         skip.ne v0, v3
         load v6, 1
 
-        skip.ne v6, 1          ; IF TMP == LAST then merge
+        skip.ne v6, 1          ; IF TMP == LAST then MERGE_LEFT
         call MERGE_LEFT
         skip.eq v6, 1
         load v3, v0
@@ -168,6 +174,9 @@ SLIDE_LEFT_ROW:
         load i, NEW_BOARD       ; NEW_BOARD[K'] := TMP'
         add i, v2
         save v0
+
+        skip.eq v1, v2          ; vd |= v1 == v2
+        load vd, 1
 
         add v2, 1               ; K' += 1
 
@@ -237,7 +246,7 @@ DRAW_TILE:
         skip.ne v0, 0           ; if TMP == 0 then done
         ret
 
-        sub v0, 1
+        sub v0, 1               ; Draw digit for TMP-1 at (X, Y)
         hex v0
         draw v2, v3, 5
         ret
@@ -252,12 +261,50 @@ DRAW_LOOP:
         ret
         call DRAW_TILE
         add v1, 1               ; K += 1
-        add v2, 8               ; X += 9
-        skip.eq v2, (3*16-1)+3
+        add v2, 8               ; X += 8
+        skip.eq v2, (3*16-1)+3  ; Start new row?
         jump DRAW_LOOP
         load v2, 15+3           ; X := 15+3
         add v3, 8               ; Y += 8
         jump DRAW_LOOP
+
+;;; PLACE_RANDOM_TILE
+PLACE_RANDOM_TILE:
+        rnd v2, 7               ; Place a 1 tile with prob 1/8 and a 0 tile with prob 7/8
+        load vb, 1
+        skip.ne v2, 0
+        load vb, 2
+        call PLACE_TILE
+        ret
+
+;;; PLACE_TILE
+;;; Input: VB: TILE
+;;; Use: V0: TMP
+;;;      V1 : K
+;;;      V2 : TARGET
+PLACE_TILE:
+        rnd v2, 15
+        ;; Pick TARGET'th empty square
+        load v1, -1
+PLACE_TILE_SCAN:
+        add v1, 1
+        skip.ne v1, 16
+        load v1, 0
+
+        load i, BOARD           ; TMP := BOARD[K]
+        add i, v1
+        restore V0
+
+        skip.eq V0, 0           ; If TMP == 0 then next
+        jump PLACE_TILE_SCAN
+
+        sub v2, 1               ; Is this the TARGET'th empty square?
+        skip.eq v2, 0
+        jump PLACE_TILE_SCAN
+
+        load v0, vb             ; BOARD[K] := TILE
+        save v0
+        ret
 
 
 ;;; NEWGAME: fill BOARD with zeroes
@@ -274,27 +321,7 @@ NEWGAME_LOOP:
         jump NEWGAME_LOOP
 
 BOARD:
-        ;; .ds 16, 0x01
-        .byte 0
-        .byte 1
-        .byte 0
-        .byte 1
-
-        .byte 3
-        .byte 0
-        .byte 0
-        .byte 5
-
-        .byte 0
-        .byte 1
-        .byte 4
-        .byte 0
-
-        .byte 7
-        .byte 7
-        .byte 7
-        .byte 6
-
+        .ds 16
 NEW_BOARD:
         .ds 16
 
